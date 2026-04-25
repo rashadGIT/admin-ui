@@ -1,13 +1,11 @@
-const BASE = process.env.NEXT_PUBLIC_API_BASE!
-const KEY  = process.env.NEXT_PUBLIC_ADMIN_API_KEY!
+// All requests go through the Next.js proxy — never directly to Lambda from the browser.
+// The proxy enforces role-based access and injects the server-side API key.
+const BASE = "/api/proxy"
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}/${path}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -35,6 +33,8 @@ export interface Member {
   rsvpGuests?: number
   rsvpTimestamp?: string
   isAdmin?: boolean
+  role?: "admin" | "family_admin" | "user"
+  adminFamilyIds?: string[]
   familyId?: string
   parentIds?: string[]
   spouseId?: string
@@ -86,27 +86,32 @@ export interface FamilyRecord {
 
 export const api = {
   rsvp: {
-    summary: () => req<RsvpSummary>("GET", "admin/rsvp"),
+    summary: () => req<RsvpSummary>("GET", "rsvp"),
   },
   members: {
-    list: () => req<{ items: Member[]; count: number }>("GET", "admin/members"),
-    save: (m: Partial<Member> & { memberId: string }) => req("POST", "admin/members", m),
-    remove: (memberId: string) => req("DELETE", `admin/members/${encodeURIComponent(memberId)}`),
+    list: () => req<{ items: Member[]; count: number }>("GET", "members"),
+    save: (m: Partial<Member> & { memberId: string }) => req("POST", "members", m),
+    update: (memberId: string, data: Partial<Member>) => req("PUT", `members/${memberId}`, data),
+    remove: (memberId: string) => req("DELETE", `members/${encodeURIComponent(memberId)}`),
   },
   tasks: {
-    list: () => req<{ items: Task[]; count: number }>("GET", "admin/tasks"),
-    create: (data: Partial<Task>) => req("POST", "admin/tasks", data),
-    update: (taskId: string, data: Partial<Task>) => req("PUT", `admin/tasks/${taskId}`, data),
+    list: () => req<{ items: Task[]; count: number }>("GET", "tasks"),
+    create: (data: Partial<Task>) => req("POST", "tasks", data),
+    update: (taskId: string, data: Partial<Task>) => req("PUT", `tasks/${taskId}`, data),
   },
   reunion: {
-    list: () => req<{ items: ReunionInfoItem[] }>("GET", "admin/reunion"),
+    list: () => req<{ items: ReunionInfoItem[] }>("GET", "reunion"),
     save: (infoId: string, data: Record<string, unknown>) =>
-      req("PUT", `admin/reunion/${infoId}`, data),
+      req("PUT", `reunion/${infoId}`, data),
   },
   families: {
-    list: () => req<{ items: FamilyRecord[]; count: number }>("GET", "admin/families"),
-    create: (data: Partial<FamilyRecord>) => req<{ ok: boolean; familyId: string }>("POST", "admin/families", data),
+    list: () => req<{ items: FamilyRecord[]; count: number }>("GET", "families"),
+    create: (data: Partial<FamilyRecord>) => req<{ ok: boolean; familyId: string }>("POST", "families", data),
     update: (familyId: string, data: Partial<FamilyRecord>) =>
-      req("PUT", `admin/families/${familyId}`, data),
+      req("PUT", `families/${familyId}`, data),
+  },
+  auth: {
+    setPassword: (email: string, passwordHash: string) =>
+      req("POST", "auth/credentials", { email, passwordHash }),
   },
 }

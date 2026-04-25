@@ -1,5 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
+import Link from "next/link"
 import { api, type Member } from "@/lib/api"
 import styles from "./tree.module.css"
 
@@ -179,7 +181,42 @@ function TreeNodeBlock({ node, depth }: { node: TreeNode; depth: number }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+function ProfileBanner({ memberId }: { memberId: string }) {
+  const [incomplete, setIncomplete] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    api.members.list().then(({ items }) => {
+      const me = items.find(m => m.memberId === memberId)
+      if (me && (!me.firstName || !me.dob || !me.rsvpStatus || me.rsvpStatus === "pending")) {
+        setIncomplete(true)
+      }
+    }).catch(() => {})
+  }, [memberId])
+
+  if (!incomplete || dismissed) return null
+
+  return (
+    <div className="mb-6 flex items-center justify-between gap-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+      <p className="text-sm text-amber-800">
+        Your profile is incomplete. Add your RSVP and personal details so the family knows you&apos;re coming.
+      </p>
+      <div className="flex items-center gap-3 shrink-0">
+        <Link href="/profile" className="text-sm font-medium text-amber-700 hover:text-amber-900 underline underline-offset-2">
+          Complete profile
+        </Link>
+        <button onClick={() => setDismissed(true)} className="text-amber-400 hover:text-amber-600" aria-label="Dismiss">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function TreePage() {
+  const { data: session } = useSession()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -195,6 +232,7 @@ export default function TreePage() {
 
   return (
     <div>
+      {session?.user?.memberId && <ProfileBanner memberId={session.user.memberId} />}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Family Tree</h2>
