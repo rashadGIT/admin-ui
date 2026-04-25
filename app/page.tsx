@@ -56,6 +56,7 @@ export default function Dashboard() {
           <CardTitle>RSVP Status</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-gray-50">
               <tr>
@@ -80,6 +81,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -10,7 +10,14 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     },
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) throw new Error(`${method} /${path} → ${res.status}`)
+  if (!res.ok) {
+    let message = `${method} /${path} → ${res.status}`
+    try {
+      const errBody = await res.json() as { error?: string }
+      if (errBody?.error) message = errBody.error
+    } catch { /* ignore parse failure */ }
+    throw new Error(message)
+  }
   return res.json() as Promise<T>
 }
 
@@ -29,6 +36,11 @@ export interface Member {
   rsvpTimestamp?: string
   isAdmin?: boolean
   familyId?: string
+  parentIds?: string[]
+  spouseId?: string
+  isDeceased?: boolean
+  deathDate?: string
+  tribute?: string
 }
 
 export interface Task {
@@ -79,7 +91,7 @@ export const api = {
   members: {
     list: () => req<{ items: Member[]; count: number }>("GET", "admin/members"),
     save: (m: Partial<Member> & { memberId: string }) => req("POST", "admin/members", m),
-    remove: (memberId: string) => req("DELETE", `admin/members/${memberId}`),
+    remove: (memberId: string) => req("DELETE", `admin/members/${encodeURIComponent(memberId)}`),
   },
   tasks: {
     list: () => req<{ items: Task[]; count: number }>("GET", "admin/tasks"),
@@ -93,6 +105,7 @@ export const api = {
   },
   families: {
     list: () => req<{ items: FamilyRecord[]; count: number }>("GET", "admin/families"),
+    create: (data: Partial<FamilyRecord>) => req<{ ok: boolean; familyId: string }>("POST", "admin/families", data),
     update: (familyId: string, data: Partial<FamilyRecord>) =>
       req("PUT", `admin/families/${familyId}`, data),
   },

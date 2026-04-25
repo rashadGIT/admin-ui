@@ -75,7 +75,7 @@ export default function ReunionPage() {
               <CardTitle className="text-base">{item.infoId}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {FIELDS.map(f => (
                   <div key={f.key} className={f.type === "textarea" ? "col-span-2" : ""}>
                     <Label className="mb-1 block">{f.label}</Label>

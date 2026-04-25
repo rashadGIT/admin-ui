@@ -79,14 +79,14 @@ export default function TasksPage() {
         <Button onClick={openDialog}>+ Add Task</Button>
       </div>
 
-      <div className="flex gap-3 mb-4">
+      <div className="flex flex-wrap gap-3 mb-4">
         <Input
           placeholder="Search tasks…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="max-w-sm"
+          className="flex-1 min-w-0"
         />
-        <Select value={filter} onChange={e => setFilter(e.target.value as typeof filter)} className="w-32">
+        <Select value={filter} onChange={e => setFilter(e.target.value as typeof filter)} className="w-32 shrink-0">
           <option value="all">All</option>
           <option value="open">Open</option>
           <option value="done">Done</option>
@@ -98,50 +98,87 @@ export default function TasksPage() {
           {loading ? (
             <p className="p-6 text-muted-foreground">Loading…</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="border-b bg-gray-50">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Task</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Assigned To</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Due</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(t => (
-                  <tr key={t.taskId} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <span className={t.status === "done" ? "line-through text-gray-400" : "font-medium"}>
-                        {t.title}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{t.assignedToName ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-500">
-                      {t.dueDate ? (
-                        <span className={t.status === "open" && t.dueDate < new Date().toISOString().slice(0, 10) ? "text-red-500 font-medium" : ""}>
-                          {t.dueDate}
+            <>
+              {/* Mobile card list */}
+              <ul className="md:hidden divide-y">
+                {filtered.map(t => {
+                  const overdue = t.status === "open" && !!t.dueDate && t.dueDate < new Date().toISOString().slice(0, 10)
+                  return (
+                    <li key={t.taskId} className="p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={t.status === "done" ? "line-through text-gray-400" : "font-medium"}>
+                          {t.title}
                         </span>
-                      ) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={t.status === "done" ? "success" : "outline"}>{t.status}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                        <Badge variant={t.status === "done" ? "success" : "outline"} className="shrink-0">{t.status}</Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
+                        {t.assignedToName && <span>{t.assignedToName}</span>}
+                        {t.dueDate && (
+                          <span className={overdue ? "text-red-500 font-medium" : ""}>{t.dueDate}</span>
+                        )}
+                      </div>
                       <button
                         onClick={() => toggleStatus(t)}
                         className="text-xs text-blue-600 hover:underline"
                       >
                         {t.status === "open" ? "Mark done" : "Reopen"}
                       </button>
-                    </td>
-                  </tr>
-                ))}
+                    </li>
+                  )
+                })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No tasks found</td></tr>
+                  <li className="px-4 py-8 text-center text-gray-400">No tasks found</li>
                 )}
-              </tbody>
-            </table>
+              </ul>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-gray-50">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">Task</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">Assigned To</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">Due</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map(t => (
+                      <tr key={t.taskId} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <span className={t.status === "done" ? "line-through text-gray-400" : "font-medium"}>
+                            {t.title}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{t.assignedToName ?? "—"}</td>
+                        <td className="px-4 py-3 text-gray-500">
+                          {t.dueDate ? (
+                            <span className={t.status === "open" && t.dueDate < new Date().toISOString().slice(0, 10) ? "text-red-500 font-medium" : ""}>
+                              {t.dueDate}
+                            </span>
+                          ) : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={t.status === "done" ? "success" : "outline"}>{t.status}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => toggleStatus(t)}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            {t.status === "open" ? "Mark done" : "Reopen"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filtered.length === 0 && (
+                      <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No tasks found</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
