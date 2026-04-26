@@ -95,7 +95,10 @@ function DayCard({ day, readOnly, onChange, onRemove }: {
   const removeActivity = (i: number) => set({ activities: day.activities.filter((_, j) => j !== i) })
 
   const dressCode = day.dressCode ?? ""
-  const isCustomDress = dressCode === "Custom"
+  const isPreset = DRESS_CODE_OPTIONS.includes(dressCode)
+  // Custom mode: either "Custom" preset selected, or a non-empty value that isn't a preset
+  const isCustomDress = dressCode === "Custom" || (!isPreset && dressCode !== "")
+  const dropdownValue = isCustomDress ? "Custom" : dressCode
 
   return (
     <div className="border rounded-2xl p-5 space-y-5 bg-white relative">
@@ -135,10 +138,10 @@ function DayCard({ day, readOnly, onChange, onRemove }: {
         <div>
           <Label className="mb-1 block text-xs">Dress Code</Label>
           {readOnly ? (
-            <Input value={isCustomDress ? "" : dressCode} readOnly />
+            <Input value={dressCode} readOnly />
           ) : (
             <select
-              value={dressCode}
+              value={dropdownValue}
               onChange={e => set({ dressCode: e.target.value })}
               className="w-full border rounded-md px-3 py-2 text-sm bg-white"
             >
@@ -150,8 +153,11 @@ function DayCard({ day, readOnly, onChange, onRemove }: {
         {isCustomDress && !readOnly && (
           <div>
             <Label className="mb-1 block text-xs">Custom dress code</Label>
-            <Input value={day.dressCode ?? ""} placeholder="Describe the dress code…"
-              onChange={e => set({ dressCode: e.target.value })} />
+            <Input
+              value={isPreset ? "" : dressCode}
+              placeholder="Describe the dress code…"
+              onChange={e => set({ dressCode: e.target.value })}
+            />
           </div>
         )}
       </div>
@@ -289,16 +295,7 @@ export default function ReunionPage() {
 
       {/* ── Itinerary ── */}
       <section className="space-y-4">
-        <SectionHeader
-          title="Itinerary"
-          action={!readOnly ? (
-            <Button variant="outline" onClick={() =>
-              set({ days: sortDays([...data.days, { id: uid(), date: "", label: "", startTime: "", endTime: "", location: "", address: "", dressCode: "", menu: [], activities: [], notes: "" }]) })
-            }>
-              + Add day
-            </Button>
-          ) : undefined}
-        />
+        <SectionHeader title="Itinerary" />
         {data.days.length === 0 && (
           <p className="text-sm text-gray-400">{readOnly ? "No itinerary yet." : 'No days added yet. Click "+ Add day" to start.'}</p>
         )}
@@ -313,6 +310,13 @@ export default function ReunionPage() {
             />
           ))}
         </div>
+        {!readOnly && (
+          <Button variant="outline" onClick={() =>
+            set({ days: sortDays([...data.days, { id: uid(), date: "", label: "", startTime: "", endTime: "", location: "", address: "", dressCode: "", menu: [], activities: [], notes: "" }]) })
+          }>
+            + Add day
+          </Button>
+        )}
       </section>
 
       {/* ── FAQs ── */}
