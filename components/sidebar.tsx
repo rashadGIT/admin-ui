@@ -97,9 +97,9 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Mobile dropdown nav */}
+      {/* Mobile dropdown nav — fixed overlay so it doesn't push content down */}
       {open && (
-        <nav className="md:hidden bg-white border-b px-4 py-2 space-y-1">
+        <nav className="md:hidden fixed top-[52px] left-0 right-0 z-50 bg-white border-b shadow-md px-4 py-2 space-y-1">
           {showFamilySwitcher && (
             <FamilySwitcher adminFamilyIds={adminFamilyIds} activeFamilyId={activeFamilyId} />
           )}

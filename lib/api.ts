@@ -16,7 +16,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     } catch { /* ignore parse failure */ }
     throw new Error(message)
   }
-  return res.json() as Promise<T>
+  if (res.status === 204 || res.headers.get("content-length") === "0") return undefined as T
+  const text = await res.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────

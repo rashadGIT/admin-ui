@@ -39,9 +39,10 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
     }
   }
 
-  // Build the Lambda URL preserving query string
+  // Build the Lambda URL — re-encode each segment so special chars like # don't truncate the URL
   const url = new URL(req.url)
-  const lambdaUrl = `${LAMBDA_BASE}/admin/${proxyPath}${url.search}`
+  const encodedPath = path.map(encodeURIComponent).join("/")
+  const lambdaUrl = `${LAMBDA_BASE}/admin/${encodedPath}${url.search}`
 
   // Forward the request to Lambda with role context headers
   const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined

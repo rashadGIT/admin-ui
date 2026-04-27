@@ -40,6 +40,17 @@ function sortDays(days: Day[]): Day[] {
   })
 }
 
+// ─── Soft-delete hook ─────────────────────────────────────────────────────────
+
+function usePendingDeletes() {
+  const [ids, setIds] = useState<Set<string>>(new Set())
+  const mark   = (id: string) => setIds(s => new Set(s).add(id))
+  const unmark = (id: string) => setIds(s => { const n = new Set(s); n.delete(id); return n })
+  const clear  = ()           => setIds(new Set())
+  const has    = (id: string) => ids.has(id)
+  return { mark, unmark, clear, has }
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
@@ -79,10 +90,98 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
   )
 }
 
+function DeleteConfirmRow({ label, onConfirm, onCancel }: { label: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="flex items-center gap-3 text-sm py-1">
+      <span className="text-red-600">{label}</span>
+      <button type="button" onClick={onConfirm} className="text-red-600 font-medium hover:underline">Yes, delete</button>
+      <button type="button" onClick={onCancel} className="text-gray-500 hover:underline">Cancel</button>
+    </div>
+  )
+}
+
+// ─── Day Accordion ────────────────────────────────────────────────────────────
+
+function DayAccordion({ day, readOnly, onChange, onMarkDelete, onUnmarkDelete, isPendingDelete, initialOpen = false }: {
+  day: Day
+  readOnly: boolean
+  onChange: (d: Day) => void
+  onMarkDelete: () => void
+  onUnmarkDelete: () => void
+  isPendingDelete: boolean
+  initialOpen?: boolean
+}) {
+  const [open, setOpen] = useState(initialOpen)
+  const [confirming, setConfirming] = useState(false)
+
+  const headerLabel = [day.date, day.label].filter(Boolean).join(" · ") || "Untitled day"
+
+  return (
+    <div className={`border rounded-2xl overflow-hidden transition-colors ${isPendingDelete ? "bg-red-50 border-red-200" : "bg-white"}`}>
+      <div
+        role="button"
+        tabIndex={isPendingDelete ? -1 : 0}
+        onClick={() => { if (!isPendingDelete) setOpen(o => !o) }}
+        onKeyDown={e => { if (!isPendingDelete && (e.key === "Enter" || e.key === " ")) setOpen(o => !o) }}
+        className={`w-full flex items-center justify-between px-5 py-4 text-left transition-colors select-none ${isPendingDelete ? "cursor-default" : "hover:bg-gray-50 cursor-pointer"}`}
+      >
+        <span className={`font-medium text-sm ${isPendingDelete ? "line-through text-red-400" : ""}`}>{headerLabel}</span>
+        <span className="flex items-center gap-2 shrink-0">
+          {!readOnly && (
+            isPendingDelete ? (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onUnmarkDelete() }}
+                className="text-xs text-indigo-600 font-medium hover:underline"
+              >
+                Undo
+              </button>
+            ) : (
+              <span
+                role="button"
+                onClick={e => { e.stopPropagation(); setConfirming(true) }}
+                className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-white hover:bg-red-400 transition-colors"
+                aria-label="Remove day"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="1" y1="1" x2="9" y2="9" />
+                  <line x1="9" y1="1" x2="1" y2="9" />
+                </svg>
+              </span>
+            )
+          )}
+          {!isPendingDelete && (
+            <svg
+              width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            >
+              <polyline points="4 6 8 10 12 6" />
+            </svg>
+          )}
+        </span>
+      </div>
+      {confirming && !isPendingDelete && (
+        <div className="border-t px-5 py-3">
+          <DeleteConfirmRow
+            label="Delete this day?"
+            onConfirm={() => { onMarkDelete(); setConfirming(false); setOpen(false) }}
+            onCancel={() => setConfirming(false)}
+          />
+        </div>
+      )}
+      {open && !isPendingDelete && (
+        <div className="border-t px-5 pb-5 pt-4">
+          <DayCard day={day} readOnly={readOnly} onChange={onChange} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Day Card ─────────────────────────────────────────────────────────────────
 
-function DayCard({ day, readOnly, onChange, onRemove }: {
-  day: Day; readOnly: boolean; onChange: (d: Day) => void; onRemove: () => void
+function DayCard({ day, readOnly, onChange }: {
+  day: Day; readOnly: boolean; onChange: (d: Day) => void
 }) {
   const set = (patch: Partial<Day>) => onChange({ ...day, ...patch })
 
@@ -101,10 +200,9 @@ function DayCard({ day, readOnly, onChange, onRemove }: {
   const dropdownValue = isCustomDress ? "Custom" : dressCode
 
   return (
-    <div className="border rounded-2xl p-5 space-y-5 bg-white relative">
-      {!readOnly && <RemoveBtn onClick={onRemove} />}
+    <div className="space-y-5">
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <Label className="mb-1 block text-xs">Date</Label>
           <Input type="date" value={day.date} readOnly={readOnly}
@@ -218,10 +316,15 @@ export default function ReunionPage() {
 
   const [data, setData] = useState<ReunionData>(EMPTY)
   const [infoId, setInfoId] = useState<string | null>(null)
+  const [newDayId, setNewDayId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const deletedDays   = usePendingDeletes()
+  const deletedFaqs   = usePendingDeletes()
+  const deletedAccoms = usePendingDeletes()
 
   useEffect(() => {
     api.reunion.list().then(r => {
@@ -249,8 +352,23 @@ export default function ReunionPage() {
     setError(null)
     setSaved(false)
     try {
-      const payload = { ...data, days: sortDays(data.days) }
+      const payload = {
+        ...data,
+        days:           sortDays(data.days.filter(d => !deletedDays.has(d.id))),
+        faqs:           data.faqs.filter(f => !deletedFaqs.has(f.id)),
+        accommodations: data.accommodations.filter(a => !deletedAccoms.has(a.id)),
+      }
       await api.reunion.save(infoId, payload as unknown as Record<string, unknown>)
+      // Commit deletions to local state
+      setData(d => ({
+        ...d,
+        days:           d.days.filter(x => !deletedDays.has(x.id)),
+        faqs:           d.faqs.filter(x => !deletedFaqs.has(x.id)),
+        accommodations: d.accommodations.filter(x => !deletedAccoms.has(x.id)),
+      }))
+      deletedDays.clear()
+      deletedFaqs.clear()
+      deletedAccoms.clear()
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {
@@ -270,9 +388,6 @@ export default function ReunionPage() {
           <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-3 py-1">View only</span>
         )}
       </div>
-
-      {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-      {saved && <p className="text-sm text-green-600 bg-green-50 rounded-lg px-3 py-2">Saved successfully.</p>}
 
       {/* ── Event Details ── */}
       <section className="bg-white rounded-2xl border p-6 space-y-4">
@@ -294,43 +409,51 @@ export default function ReunionPage() {
       </section>
 
       {/* ── Itinerary ── */}
-      <section className="space-y-4">
+      <section className="bg-white rounded-2xl border p-6 space-y-4">
         <SectionHeader title="Itinerary" />
         {data.days.length === 0 && (
           <p className="text-sm text-gray-400">{readOnly ? "No itinerary yet." : 'No days added yet. Click "+ Add day" to start.'}</p>
         )}
         <div className="space-y-4">
           {sortDays(data.days).map((day) => (
-            <DayCard
+            <DayAccordion
               key={day.id}
               day={day}
               readOnly={readOnly}
+              initialOpen={day.id === newDayId}
+              isPendingDelete={deletedDays.has(day.id)}
+              onMarkDelete={() => deletedDays.mark(day.id)}
+              onUnmarkDelete={() => deletedDays.unmark(day.id)}
               onChange={d => set({ days: data.days.map(x => x.id === day.id ? d : x) })}
-              onRemove={() => set({ days: data.days.filter(x => x.id !== day.id) })}
             />
           ))}
         </div>
         {!readOnly && (
-          <Button variant="outline" onClick={() =>
-            set({ days: sortDays([...data.days, { id: uid(), date: "", label: "", startTime: "", endTime: "", location: "", address: "", dressCode: "", menu: [], activities: [], notes: "" }]) })
-          }>
-            + Add day
-          </Button>
+          <AddButton label="Add day" onClick={() => {
+            const id = uid()
+            setNewDayId(id)
+            set({ days: sortDays([...data.days, { id, date: "", label: "", startTime: "", endTime: "", location: "", address: "", dressCode: "", menu: [], activities: [], notes: "" }]) })
+          }} />
         )}
       </section>
 
       {/* ── FAQs ── */}
       <section className="bg-white rounded-2xl border p-6 space-y-3">
         <SectionHeader title="FAQs" />
-        {data.faqs.map((faq, i) => (
-          <div key={faq.id} className="relative border rounded-xl p-4 space-y-2 pr-8">
-            <RemoveBtn onClick={() => set({ faqs: data.faqs.filter((_, j) => j !== i) })} />
-            <Input value={faq.question} placeholder="Question" readOnly={readOnly}
-              onChange={e => set({ faqs: data.faqs.map((f, j) => j === i ? { ...f, question: e.target.value } : f) })} />
-            <Textarea rows={2} value={faq.answer} placeholder="Answer" readOnly={readOnly}
-              onChange={e => set({ faqs: data.faqs.map((f, j) => j === i ? { ...f, answer: e.target.value } : f) })} />
-          </div>
-        ))}
+        {data.faqs.map((faq, i) => {
+          const pending = deletedFaqs.has(faq.id)
+          return (
+            <FaqCard
+              key={faq.id}
+              faq={faq}
+              readOnly={readOnly}
+              isPendingDelete={pending}
+              onMarkDelete={() => deletedFaqs.mark(faq.id)}
+              onUnmarkDelete={() => deletedFaqs.unmark(faq.id)}
+              onChange={patch => set({ faqs: data.faqs.map((f, j) => j === i ? { ...f, ...patch } : f) })}
+            />
+          )
+        })}
         {data.faqs.length === 0 && readOnly && <p className="text-sm text-gray-400">No FAQs yet.</p>}
         {!readOnly && (
           <AddButton label="Add FAQ" onClick={() => set({ faqs: [...data.faqs, { id: uid(), question: "", answer: "" }] })} />
@@ -341,13 +464,15 @@ export default function ReunionPage() {
       <section className="bg-white rounded-2xl border p-6 space-y-3">
         <SectionHeader title="Accommodations" />
         {data.accommodations.map((acc, i) => (
-          <div key={acc.id} className="relative border rounded-xl p-4 space-y-2 pr-8">
-            <RemoveBtn onClick={() => set({ accommodations: data.accommodations.filter((_, j) => j !== i) })} />
-            <Input value={acc.name} placeholder="Hotel / location name" readOnly={readOnly}
-              onChange={e => set({ accommodations: data.accommodations.map((a, j) => j === i ? { ...a, name: e.target.value } : a) })} />
-            <Textarea rows={2} value={acc.details} placeholder="Address, booking link, notes…" readOnly={readOnly}
-              onChange={e => set({ accommodations: data.accommodations.map((a, j) => j === i ? { ...a, details: e.target.value } : a) })} />
-          </div>
+          <AccomCard
+            key={acc.id}
+            acc={acc}
+            readOnly={readOnly}
+            isPendingDelete={deletedAccoms.has(acc.id)}
+            onMarkDelete={() => deletedAccoms.mark(acc.id)}
+            onUnmarkDelete={() => deletedAccoms.unmark(acc.id)}
+            onChange={patch => set({ accommodations: data.accommodations.map((a, j) => j === i ? { ...a, ...patch } : a) })}
+          />
         ))}
         {data.accommodations.length === 0 && readOnly && <p className="text-sm text-gray-400">No accommodations listed yet.</p>}
         {!readOnly && (
@@ -357,11 +482,117 @@ export default function ReunionPage() {
 
       {/* ── Save ── */}
       {!readOnly && (
-        <div className="pb-8">
+        <div className="pb-8 flex flex-col sm:flex-row sm:items-center gap-3">
           <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
             {saving ? "Saving…" : "Save all changes"}
           </Button>
+          {saved && <p className="text-sm text-green-600">Saved successfully.</p>}
+          {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── FAQ Card ─────────────────────────────────────────────────────────────────
+
+function FaqCard({ faq, readOnly, isPendingDelete, onMarkDelete, onUnmarkDelete, onChange }: {
+  faq: Faq
+  readOnly: boolean
+  isPendingDelete: boolean
+  onMarkDelete: () => void
+  onUnmarkDelete: () => void
+  onChange: (patch: Partial<Faq>) => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <div className={`relative border rounded-xl p-4 space-y-2 transition-colors ${isPendingDelete ? "bg-red-50 border-red-200" : ""} ${!isPendingDelete ? "pr-8" : ""}`}>
+      {!readOnly && (
+        isPendingDelete ? (
+          <button
+            type="button"
+            onClick={onUnmarkDelete}
+            className="absolute top-3 right-3 text-xs text-indigo-600 font-medium hover:underline"
+          >
+            Undo
+          </button>
+        ) : (
+          <RemoveBtn onClick={() => setConfirming(true)} />
+        )
+      )}
+      <Input
+        value={faq.question}
+        placeholder="Question"
+        readOnly={readOnly || isPendingDelete}
+        className={isPendingDelete ? "line-through text-red-400" : ""}
+        onChange={e => onChange({ question: e.target.value })}
+      />
+      <Textarea
+        rows={2}
+        value={faq.answer}
+        placeholder="Answer"
+        readOnly={readOnly || isPendingDelete}
+        onChange={e => onChange({ answer: e.target.value })}
+      />
+      {confirming && !isPendingDelete && (
+        <DeleteConfirmRow
+          label="Delete this FAQ?"
+          onConfirm={() => { onMarkDelete(); setConfirming(false) }}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Accommodation Card ───────────────────────────────────────────────────────
+
+function AccomCard({ acc, readOnly, isPendingDelete, onMarkDelete, onUnmarkDelete, onChange }: {
+  acc: Accommodation
+  readOnly: boolean
+  isPendingDelete: boolean
+  onMarkDelete: () => void
+  onUnmarkDelete: () => void
+  onChange: (patch: Partial<Accommodation>) => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <div className={`relative border rounded-xl p-4 space-y-2 transition-colors ${isPendingDelete ? "bg-red-50 border-red-200" : ""} ${!isPendingDelete ? "pr-8" : ""}`}>
+      {!readOnly && (
+        isPendingDelete ? (
+          <button
+            type="button"
+            onClick={onUnmarkDelete}
+            className="absolute top-3 right-3 text-xs text-indigo-600 font-medium hover:underline"
+          >
+            Undo
+          </button>
+        ) : (
+          <RemoveBtn onClick={() => setConfirming(true)} />
+        )
+      )}
+      <Input
+        value={acc.name}
+        placeholder="Hotel / location name"
+        readOnly={readOnly || isPendingDelete}
+        className={isPendingDelete ? "line-through text-red-400" : ""}
+        onChange={e => onChange({ name: e.target.value })}
+      />
+      <Textarea
+        rows={2}
+        value={acc.details}
+        placeholder="Address, booking link, notes…"
+        readOnly={readOnly || isPendingDelete}
+        onChange={e => onChange({ details: e.target.value })}
+      />
+      {confirming && !isPendingDelete && (
+        <DeleteConfirmRow
+          label="Delete this accommodation?"
+          onConfirm={() => { onMarkDelete(); setConfirming(false) }}
+          onCancel={() => setConfirming(false)}
+        />
       )}
     </div>
   )

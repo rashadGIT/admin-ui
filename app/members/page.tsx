@@ -39,6 +39,7 @@ export default function MembersPage() {
   const [childrenOpen, setChildrenOpen] = useState(false)
   const childrenRef = useRef<HTMLDivElement>(null)
   const [saving, setSaving] = useState(false)
+  const [removeError, setRemoveError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [spouseConflict, setSpouseConflict] = useState<{
     newSpouseId: string
@@ -196,12 +197,19 @@ export default function MembersPage() {
   }
 
   const remove = async (memberId: string) => {
-    if (!confirm("Remove this member?")) return
+    console.log("[MAMA] Remove clicked", { memberId })
+    const ok = confirm("Remove this member?")
+    console.log("[MAMA] Confirm result", { ok })
+    if (!ok) return
+    setRemoveError(null)
     setMembers(prev => prev.filter(m => m.memberId !== memberId))
     try {
-      await api.members.remove(memberId)
-    } catch {
-      alert("Failed to remove member. Check your network connection.")
+      const result = await api.members.remove(memberId)
+      console.log("[MAMA] Remove API result", { memberId, result })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error"
+      console.error("[MAMA] Remove failed", { memberId, error: msg })
+      setRemoveError(`Failed to remove member: ${msg}`)
       load()
     }
   }
@@ -223,6 +231,10 @@ export default function MembersPage() {
         <h2 className="text-2xl font-bold">Members</h2>
         <Button onClick={openAdd}>+ Add Member</Button>
       </div>
+
+      {removeError && (
+        <p className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{removeError}</p>
+      )}
 
       <div className="mb-4">
         <Input placeholder="Search by name or phone…" value={search} onChange={e => setSearch(e.target.value)} className="w-full max-w-sm" />
