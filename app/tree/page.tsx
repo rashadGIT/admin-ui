@@ -13,6 +13,13 @@ type TreeNode = {
   spouse?: Member
   children: TreeNode[]       // children of both parents in this couple
   singleChildren: TreeNode[] // children of only the primary member
+  relationNote?: string      // e.g. "(adoptive)" or "(step)"
+  externalParents?: string[] // names of external (non-family) biological parents
+}
+
+function resolveParentsTree(m: Member): { memberId?: string; externalName?: string; type: string }[] {
+  if (m.parents?.length) return m.parents
+  return (m.parentIds ?? []).map(id => ({ memberId: id, type: "biological" }))
 }
 
 function buildForest(members: Member[]): TreeNode[] {
@@ -39,16 +46,28 @@ function buildForest(members: Member[]): TreeNode[] {
 
   const childKeys = new Set<string>()
   for (const m of members) {
-    if (!m.parentIds?.length) continue
+    const parentLinks = resolveParentsTree(m)
+    const inTreeLinks = parentLinks.filter(p => p.memberId && byId.has(p.memberId))
+    if (!inTreeLinks.length) continue
+
     const childNode = findOwner(m.memberId)
     if (!childNode || childKeys.has(childNode.key)) continue
-    for (const pid of m.parentIds) {
-      const parentNode = findOwner(pid)
+
+    // Capture external parents for display
+    const externalParents = parentLinks.filter(p => p.externalName).map(p => p.externalName!)
+    if (externalParents.length) childNode.externalParents = externalParents
+
+    for (const link of inTreeLinks) {
+      const parentNode = findOwner(link.memberId!)
       if (parentNode && parentNode.key !== childNode.key) {
-        // Couple's child only if both parents are listed
         const spouseId = parentNode.spouse?.memberId
-        const hasBothParents = spouseId && m.parentIds.includes(spouseId)
+        const hasBothParents = spouseId && inTreeLinks.some(p => p.memberId === spouseId)
         const list = hasBothParents ? parentNode.children : parentNode.singleChildren
+
+        // Set relation note based on parent type
+        if (link.type === "adoptive") childNode.relationNote = "(adoptive)"
+        else if (link.type === "step") childNode.relationNote = "(step)"
+
         if (!list.find(c => c.key === childNode.key)) {
           list.push(childNode)
           childKeys.add(childNode.key)
@@ -135,6 +154,20 @@ function NodeCard({
           </div>
         )}
       </div>
+      {(node.relationNote || node.externalParents?.length) && (
+        <div className="px-3 pb-2 flex flex-wrap gap-2">
+          {node.relationNote && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+              {node.relationNote}
+            </span>
+          )}
+          {node.externalParents?.map(name => (
+            <span key={name} className="text-xs px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-200">
+              bio: {name} (external)
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

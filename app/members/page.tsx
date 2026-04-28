@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import { api, type Member, type FamilyRecord } from "@/lib/api"
+import { api, type Member, type ParentLink, type FamilyRecord } from "@/lib/api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,9 +21,14 @@ const emptyMember = (): Partial<Member> & { memberId: string } => ({
   memberId: crypto.randomUUID(),
   firstName: "", lastName: "", preferredName: "",
   whatsappNumber: "", email: "", dob: "", rsvpStatus: "pending",
-  isAdmin: false, parentIds: [], spouseId: undefined,
+  isAdmin: false, parents: [], spouseId: undefined,
   isDeceased: false, deathDate: "",
 })
+
+function resolveParentsClient(member: Partial<Member>): ParentLink[] {
+  if (member.parents?.length) return member.parents
+  return (member.parentIds ?? []).map(id => ({ memberId: id, type: "biological" as const }))
+}
 
 const auditLog = (action: string, details: Record<string, unknown>) => {
   console.log(`[MAMA AUDIT] ${new Date().toISOString()} | ${action}`, details)
@@ -79,8 +84,8 @@ export default function MembersPage() {
   }
 
   const openEdit = (m: Member) => {
-    setForm({ ...m })
-    setChildrenIds(members.filter(x => x.parentIds?.includes(m.memberId)).map(x => x.memberId))
+    setForm({ ...m, parents: resolveParentsClient(m) })
+    setChildrenIds(members.filter(x => resolveParentsClient(x).some(p => p.memberId === m.memberId)).map(x => x.memberId))
     setDialogOpen(true)
   }
 
@@ -167,7 +172,7 @@ export default function MembersPage() {
         await Promise.all(patches)
       }
 
-      const originalChildren = members.filter(x => x.parentIds?.includes(form.memberId)).map(x => x.memberId)
+      const originalChildren = members.filter(x => resolveParentsClient(x).some(p => p.memberId === form.memberId)).map(x => x.memberId)
       const toAdd = childrenIds.filter(id => !originalChildren.includes(id))
       const toRemove = originalChildren.filter(id => !childrenIds.includes(id))
 
@@ -183,11 +188,13 @@ export default function MembersPage() {
       await Promise.all([
         ...toAdd.map(id => {
           const child = members.find(m => m.memberId === id)!
-          return api.members.save({ ...child, parentIds: [...(child.parentIds ?? []), form.memberId] })
+          const childParents = resolveParentsClient(child)
+          return api.members.save({ ...child, parents: [...childParents, { memberId: form.memberId, type: "biological" as const }] })
         }),
         ...toRemove.map(id => {
           const child = members.find(m => m.memberId === id)!
-          return api.members.save({ ...child, parentIds: (child.parentIds ?? []).filter(p => p !== form.memberId) })
+          const childParents = resolveParentsClient(child)
+          return api.members.save({ ...child, parents: childParents.filter(p => p.memberId !== form.memberId) })
         }),
       ])
 
@@ -375,58 +382,101 @@ export default function MembersPage() {
               <hr className="flex-1 border-gray-200" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="mb-1 block">Parent 1</Label>
-                <Select
-                  value={form.parentIds?.[0] ?? ""}
-                  onChange={e => setForm(f => {
-                    const ids = [...(f.parentIds ?? [])]
-                    ids[0] = e.target.value
-                    return { ...f, parentIds: ids.filter(Boolean) }
-                  })}
+            <div className="col-span-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="block">Parents</Label>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, parents: [...(f.parents ?? []), { memberId: "", type: "biological" as const }] }))}
+                  className="text-xs text-blue-600 hover:underline"
                 >
-                  <option value="">None</option>
-                  {otherMembers.map(m => (
-                    <option key={m.memberId} value={m.memberId}>
-                      {m.firstName} {m.lastName ?? ""}
-                    </option>
-                  ))}
-                </Select>
+                  + Add parent
+                </button>
               </div>
-              <div>
-                <Label className="mb-1 block">Parent 2</Label>
-                <Select
-                  value={form.parentIds?.[1] ?? ""}
-                  onChange={e => setForm(f => {
-                    const ids = [...(f.parentIds ?? [])]
-                    ids[1] = e.target.value
-                    return { ...f, parentIds: ids.filter(Boolean) }
-                  })}
-                >
-                  <option value="">None</option>
-                  {otherMembers.map(m => (
-                    <option key={m.memberId} value={m.memberId}>
-                      {m.firstName} {m.lastName ?? ""}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="col-span-2">
-                <Label className="mb-1 block">Spouse</Label>
-                <Select
-                  value={form.spouseId ?? ""}
-                  onChange={e => handleSpouseChange(e.target.value)}
-                >
-                  <option value="">None</option>
-                  {otherMembers.map(m => (
-                    <option key={m.memberId} value={m.memberId}>
-                      {m.firstName} {m.lastName ?? ""}
-                      {m.spouseId && m.spouseId !== form.memberId ? " (married)" : ""}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+              {(form.parents ?? []).map((link, idx) => (
+                <div key={idx} className="flex gap-2 items-start">
+                  <div className="flex-1 space-y-1">
+                    {link.externalName !== undefined ? (
+                      <Input
+                        placeholder="External parent name"
+                        value={link.externalName}
+                        onChange={e => setForm(f => {
+                          const parents = [...(f.parents ?? [])]
+                          parents[idx] = { ...parents[idx], externalName: e.target.value, memberId: undefined }
+                          return { ...f, parents }
+                        })}
+                      />
+                    ) : (
+                      <Select
+                        value={link.memberId ?? ""}
+                        onChange={e => setForm(f => {
+                          const parents = [...(f.parents ?? [])]
+                          parents[idx] = { ...parents[idx], memberId: e.target.value, externalName: undefined }
+                          return { ...f, parents }
+                        })}
+                      >
+                        <option value="">Select parent…</option>
+                        {otherMembers.map(m => (
+                          <option key={m.memberId} value={m.memberId}>
+                            {m.firstName} {m.lastName ?? ""}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3 rounded border-gray-300"
+                        checked={link.externalName !== undefined}
+                        onChange={e => setForm(f => {
+                          const parents = [...(f.parents ?? [])]
+                          parents[idx] = e.target.checked
+                            ? { type: parents[idx].type, externalName: "" }
+                            : { type: parents[idx].type, memberId: "" }
+                          return { ...f, parents }
+                        })}
+                      />
+                      Not in family tree
+                    </label>
+                  </div>
+                  <Select
+                    value={link.type}
+                    onChange={e => setForm(f => {
+                      const parents = [...(f.parents ?? [])]
+                      parents[idx] = { ...parents[idx], type: e.target.value as ParentLink["type"] }
+                      return { ...f, parents }
+                    })}
+                    className="w-32 shrink-0"
+                  >
+                    <option value="biological">Biological</option>
+                    <option value="adoptive">Adoptive</option>
+                    <option value="step">Step</option>
+                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, parents: (f.parents ?? []).filter((_, i) => i !== idx) }))}
+                    className="text-red-400 hover:text-red-600 mt-1.5 text-lg leading-none"
+                    aria-label="Remove parent"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3">
+              <Label className="mb-1 block">Spouse</Label>
+              <Select
+                value={form.spouseId ?? ""}
+                onChange={e => handleSpouseChange(e.target.value)}
+              >
+                <option value="">None</option>
+                {otherMembers.map(m => (
+                  <option key={m.memberId} value={m.memberId}>
+                    {m.firstName} {m.lastName ?? ""}
+                    {m.spouseId && m.spouseId !== form.memberId ? " (married)" : ""}
+                  </option>
+                ))}
+              </Select>
             </div>
 
             {otherMembers.length > 0 && (

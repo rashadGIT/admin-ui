@@ -23,6 +23,12 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface ParentLink {
+  memberId?: string
+  externalName?: string
+  type: "biological" | "adoptive" | "step"
+}
+
 export interface Member {
   memberId: string
   firstName: string
@@ -38,7 +44,8 @@ export interface Member {
   role?: "admin" | "family_admin" | "user"
   adminFamilyIds?: string[]
   familyId?: string
-  parentIds?: string[]
+  parents?: ParentLink[]
+  parentIds?: string[] // deprecated — normalized to parents by API
   spouseId?: string
   isDeceased?: boolean
   deathDate?: string
