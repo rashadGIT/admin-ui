@@ -76,15 +76,18 @@ export default function ProfilePage() {
   if (!member) return <div className="p-8 text-sm text-red-500">Profile not found.</div>
 
   return (
-    <div className="max-w-lg mx-auto py-8 px-4">
-      <h1 className="text-2xl font-bold mb-1">My Profile</h1>
-      <p className="text-sm text-gray-500 mb-6">Update your personal info and RSVP status.</p>
+    <form onSubmit={handleSave} className="space-y-8 max-w-3xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">My Profile</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Update your personal info and RSVP status.</p>
+        </div>
+      </div>
 
-      {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2 mb-4">{error}</p>}
-      {success && <p className="text-sm text-green-600 bg-green-50 rounded-lg px-3 py-2 mb-4">Saved successfully.</p>}
-
-      <form onSubmit={handleSave} className="space-y-4 bg-white rounded-2xl border p-6">
-        <div className="grid grid-cols-2 gap-4">
+      {/* ── Personal Info ── */}
+      <section className="bg-white rounded-2xl border p-6 space-y-4">
+        <h3 className="text-base font-semibold mb-3">Personal Info</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label className="mb-1 block">First name</Label>
             <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required />
@@ -93,25 +96,26 @@ export default function ProfilePage() {
             <Label className="mb-1 block">Last name</Label>
             <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
           </div>
+          <div className="sm:col-span-2">
+            <Label className="mb-1 block">Preferred name</Label>
+            <Input value={form.preferredName} onChange={e => setForm(f => ({ ...f, preferredName: e.target.value }))} placeholder="Optional nickname" />
+          </div>
+          <div className="sm:col-span-2">
+            <Label className="mb-1 block">Email</Label>
+            <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div>
+            <Label className="mb-1 block">Date of birth</Label>
+            <Input type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
+          </div>
         </div>
+      </section>
 
+      {/* ── RSVP ── */}
+      <section className="bg-white rounded-2xl border p-6 space-y-4">
+        <h3 className="text-base font-semibold mb-3">RSVP</h3>
         <div>
-          <Label className="mb-1 block">Preferred name</Label>
-          <Input value={form.preferredName} onChange={e => setForm(f => ({ ...f, preferredName: e.target.value }))} placeholder="Optional nickname" />
-        </div>
-
-        <div>
-          <Label className="mb-1 block">Email</Label>
-          <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-        </div>
-
-        <div>
-          <Label className="mb-1 block">Date of birth</Label>
-          <Input type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
-        </div>
-
-        <div>
-          <Label className="mb-1 block">RSVP</Label>
+          <Label className="mb-1 block">Will you be attending?</Label>
           <select
             value={form.rsvpStatus}
             onChange={e => setForm(f => ({ ...f, rsvpStatus: e.target.value as Member["rsvpStatus"] }))}
@@ -120,7 +124,6 @@ export default function ProfilePage() {
             {RSVP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
-
         {form.rsvpStatus === "yes" && (
           <div>
             <Label className="mb-1 block">Additional guests</Label>
@@ -133,32 +136,37 @@ export default function ProfilePage() {
             />
           </div>
         )}
+      </section>
 
-        {/* Read-only fields */}
-        <div className="pt-2 border-t space-y-3">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Account info</p>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Role</span>
-            <span className="font-medium capitalize">{session?.user?.role?.replace("_", " ")}</span>
-          </div>
-          {member.whatsappNumber && (
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">WhatsApp</span>
-              <span className="font-medium">{member.whatsappNumber}</span>
-            </div>
-          )}
-          {session?.user?.familyId && (
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Family ID</span>
-              <span className="font-medium font-mono text-xs">{session.user.familyId}</span>
-            </div>
-          )}
+      {/* ── Account Info ── */}
+      <section className="bg-white rounded-2xl border p-6 space-y-3">
+        <h3 className="text-base font-semibold mb-3">Account Info</h3>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-500">Role</span>
+          <span className="font-medium capitalize">{session?.user?.role?.replace("_", " ")}</span>
         </div>
+        {member.whatsappNumber && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">WhatsApp</span>
+            <span className="font-medium">{member.whatsappNumber}</span>
+          </div>
+        )}
+        {session?.user?.familyId && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Family ID</span>
+            <span className="font-medium font-mono text-xs">{session.user.familyId}</span>
+          </div>
+        )}
+      </section>
 
-        <Button type="submit" className="w-full" disabled={saving}>
+      {/* ── Save ── */}
+      <div className="pb-8 flex flex-col sm:flex-row sm:items-center gap-3">
+        <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
           {saving ? "Saving…" : "Save changes"}
         </Button>
-      </form>
-    </div>
+        {success && <p className="text-sm text-green-600">Saved successfully.</p>}
+        {error && <p className="text-sm text-red-500">{error}</p>}
+      </div>
+    </form>
   )
 }
