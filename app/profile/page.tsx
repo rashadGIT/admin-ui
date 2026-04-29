@@ -112,31 +112,33 @@ export default function ProfilePage() {
       </section>
 
       {/* ── RSVP ── */}
-      <section className="bg-white rounded-2xl border p-6 space-y-4">
-        <h3 className="text-base font-semibold mb-3">RSVP</h3>
-        <div>
-          <Label className="mb-1 block">Will you be attending?</Label>
-          <select
-            value={form.rsvpStatus}
-            onChange={e => setForm(f => ({ ...f, rsvpStatus: e.target.value as Member["rsvpStatus"] }))}
-            className="w-full border rounded-md px-3 py-2 text-sm bg-white"
-          >
-            {RSVP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        {form.rsvpStatus === "yes" && (
+      {role !== "admin" && (
+        <section className="bg-white rounded-2xl border p-6 space-y-4">
+          <h3 className="text-base font-semibold mb-3">RSVP</h3>
           <div>
-            <Label className="mb-1 block">Additional guests</Label>
-            <Input
-              type="number"
-              min={0}
-              max={20}
-              value={form.rsvpGuests}
-              onChange={e => setForm(f => ({ ...f, rsvpGuests: Number(e.target.value) }))}
-            />
+            <Label className="mb-1 block">Will you be attending?</Label>
+            <select
+              value={form.rsvpStatus}
+              onChange={e => setForm(f => ({ ...f, rsvpStatus: e.target.value as Member["rsvpStatus"] }))}
+              className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+            >
+              {RSVP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </div>
-        )}
-      </section>
+          {form.rsvpStatus === "yes" && (
+            <div>
+              <Label className="mb-1 block">Additional guests</Label>
+              <Input
+                type="number"
+                min={0}
+                max={20}
+                value={form.rsvpGuests}
+                onChange={e => setForm(f => ({ ...f, rsvpGuests: Number(e.target.value) }))}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Account Info ── */}
       <section className="bg-white rounded-2xl border p-6 space-y-3">
@@ -151,7 +153,7 @@ export default function ProfilePage() {
             <span className="font-medium">{member.whatsappNumber}</span>
           </div>
         )}
-        {session?.user?.familyId && (
+        {role !== "admin" && session?.user?.familyId && (
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Family ID</span>
             <span className="font-medium font-mono text-xs">{session.user.familyId}</span>

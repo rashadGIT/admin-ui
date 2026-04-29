@@ -83,6 +83,8 @@ export default function FamiliesPage() {
         inviteCode,
         organizerName: editing.organizerName?.trim(),
         organizerMemberId: editing.organizerMemberId,
+        patriarchMemberId: editing.patriarchMemberId,
+        patriarchName: editing.patriarchName,
       })
       setEditing(null)
       reload()
@@ -281,7 +283,7 @@ export default function FamiliesPage() {
                 className="w-full border rounded-md px-3 py-2 text-sm disabled:opacity-50"
               >
                 <option value="">— None —</option>
-                {members.map(m => (
+                {members.filter(m => !editing?.familyId || m.familyId === editing.familyId).map(m => (
                   <option key={m.memberId} value={m.memberId}>
                     {m.firstName}{m.lastName ? " " + m.lastName : ""}
                     {m.preferredName ? ` (${m.preferredName})` : ""}
@@ -289,6 +291,32 @@ export default function FamiliesPage() {
                 ))}
               </select>
               {membersLoading && <p className="text-xs text-gray-400 mt-1">Loading members…</p>}
+            </div>
+            <div>
+              <Label>Patriarch / Matriarch</Label>
+              <select
+                value={editing?.patriarchMemberId ?? ""}
+                disabled={membersLoading}
+                onChange={e => {
+                  const member = members.find(m => m.memberId === e.target.value)
+                  setEditing(f => f && ({
+                    ...f,
+                    patriarchMemberId: member?.memberId ?? "",
+                    patriarchName: member
+                      ? `${member.firstName}${member.lastName ? " " + member.lastName : ""}`
+                      : "",
+                  }))
+                }}
+                className="w-full border rounded-md px-3 py-2 text-sm disabled:opacity-50"
+              >
+                <option value="">— None —</option>
+                {members.filter(m => !editing?.familyId || m.familyId === editing.familyId).map(m => (
+                  <option key={m.memberId} value={m.memberId}>
+                    {m.firstName}{m.lastName ? " " + m.lastName : ""}
+                    {m.preferredName ? ` (${m.preferredName})` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <Label>Reunion Date</Label>

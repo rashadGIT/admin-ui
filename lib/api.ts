@@ -62,6 +62,7 @@ export interface Task {
   createdByName?: string
   createdAt?: string
   completedAt?: string
+  familyId?: string
 }
 
 export interface ReunionInfoItem {
@@ -89,6 +90,19 @@ export interface FamilyRecord {
   organizerName?: string
   organizerMemberId?: string
   adminPhones: string[]
+  patriarchMemberId?: string
+  patriarchName?: string
+}
+
+export interface FamilyRsvpSummary {
+  familyId: string
+  familyName: string
+  total: number
+  yes: number
+  no: number
+  maybe: number
+  pending: number
+  totalGuests: number
 }
 
 // ─── API calls ────────────────────────────────────────────────────────────────
@@ -96,6 +110,7 @@ export interface FamilyRecord {
 export const api = {
   rsvp: {
     summary: () => req<RsvpSummary>("GET", "rsvp"),
+    allSummaries: () => req<{ items: FamilyRsvpSummary[] }>("GET", "rsvp/all"),
   },
   members: {
     list: () => req<{ items: Member[]; count: number }>("GET", "members"),

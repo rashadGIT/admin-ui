@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 import { api, Member, FamilyRecord } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -88,9 +89,7 @@ function PasswordModal({ member, onClose }: { member: Member; onClose: () => voi
 }
 
 function RoleEditor({
-  member,
-  families,
-  onSave,
+  member, families, onSave,
 }: {
   member: Member
   families: FamilyRecord[]
@@ -144,26 +143,46 @@ function RoleEditor({
 }
 
 export default function RolesPage() {
+  const { data: session } = useSession()
+  const userRole = session?.user?.role
+  const adminFamilyIds = session?.user?.adminFamilyIds ?? []
+
   const [members, setMembers] = useState<Member[]>([])
   const [families, setFamilies] = useState<FamilyRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [passwordTarget, setPasswordTarget] = useState<Member | null>(null)
   const [search, setSearch] = useState("")
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string>("")
 
   useEffect(() => {
     Promise.all([api.members.list(), api.families.list()])
-      .then(([m, f]) => { setMembers(m.items); setFamilies(f.items) })
+      .then(([m, f]) => {
+        setMembers(m.items)
+        setFamilies(f.items)
+        // family_admin: auto-select if only one family
+        if (userRole === "family_admin" && adminFamilyIds.length === 1) {
+          setSelectedFamilyId(adminFamilyIds[0])
+        }
+      })
       .catch(() => setError("Failed to load data."))
       .finally(() => setLoading(false))
   }, [])
 
-  const handleSaveRole = async (memberId: string, role: Role, adminFamilyIds: string[]) => {
-    await api.members.update(memberId, { role, adminFamilyIds })
-    setMembers(prev => prev.map(m => m.memberId === memberId ? { ...m, role, adminFamilyIds } : m))
+  const handleSaveRole = async (memberId: string, role: Role, newAdminFamilyIds: string[]) => {
+    await api.members.update(memberId, { role, adminFamilyIds: newAdminFamilyIds })
+    setMembers(prev => prev.map(m => m.memberId === memberId ? { ...m, role, adminFamilyIds: newAdminFamilyIds } : m))
   }
 
-  const filtered = members.filter(m => {
+  // Families visible in the selector
+  const visibleFamilies = userRole === "admin"
+    ? families
+    : families.filter(f => adminFamilyIds.includes(f.familyId))
+
+  const filteredMembers = (selectedFamilyId
+    ? members.filter(m => m.familyId === selectedFamilyId)
+    : []
+  ).filter(m => {
     const q = search.toLowerCase()
     return (
       m.firstName?.toLowerCase().includes(q) ||
@@ -183,83 +202,91 @@ export default function RolesPage() {
 
       {error && <p className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
-      <Input
-        placeholder="Search members…"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        className="max-w-sm"
-      />
-
-      {/* Desktop table */}
-      <div className="hidden md:block bg-white rounded-2xl border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Member</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Current role</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 w-64">Change role</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Password</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {filtered.map(m => (
-              <tr key={m.memberId} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <p className="font-medium">{m.firstName} {m.lastName}</p>
-                  {m.email && <p className="text-xs text-gray-400">{m.email}</p>}
-                </td>
-                <td className="px-4 py-3">
-                  <RoleBadge role={m.role} />
-                </td>
-                <td className="px-4 py-3">
-                  <RoleEditor member={m} families={families} onSave={handleSaveRole} />
-                </td>
-                <td className="px-4 py-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPasswordTarget(m)}
-                    disabled={!m.email}
-                  >
-                    Set password
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-8">No members found.</p>
-        )}
+      {/* Family selector */}
+      <div className="max-w-sm">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Family</label>
+        <select
+          value={selectedFamilyId}
+          onChange={e => setSelectedFamilyId(e.target.value)}
+          className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+        >
+          <option value="">Select a family…</option>
+          {visibleFamilies.map(f => (
+            <option key={f.familyId} value={f.familyId}>{f.familyName}</option>
+          ))}
+        </select>
       </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-3">
-        {filtered.map(m => (
-          <div key={m.memberId} className="bg-white rounded-2xl border p-4 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-medium">{m.firstName} {m.lastName}</p>
-                {m.email && <p className="text-xs text-gray-400">{m.email}</p>}
-              </div>
-              <RoleBadge role={m.role} />
-            </div>
-            <RoleEditor member={m} families={families} onSave={handleSaveRole} />
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full"
-              onClick={() => setPasswordTarget(m)}
-              disabled={!m.email}
-            >
-              Set password
-            </Button>
+      {!selectedFamilyId ? (
+        <p className="text-sm text-gray-400 py-4">Select a family to manage roles.</p>
+      ) : (
+        <>
+          <Input
+            placeholder="Search members…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+
+          {/* Desktop table */}
+          <div className="hidden md:block bg-white rounded-2xl border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Member</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Current role</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 w-64">Change role</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Password</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredMembers.map(m => (
+                  <tr key={m.memberId} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{m.firstName} {m.lastName}</p>
+                      {m.email && <p className="text-xs text-gray-400">{m.email}</p>}
+                    </td>
+                    <td className="px-4 py-3"><RoleBadge role={m.role} /></td>
+                    <td className="px-4 py-3">
+                      <RoleEditor member={m} families={families} onSave={handleSaveRole} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button size="sm" variant="outline" onClick={() => setPasswordTarget(m)} disabled={!m.email}>
+                        Set password
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredMembers.length === 0 && (
+              <p className="text-center text-sm text-gray-400 py-8">No members found.</p>
+            )}
           </div>
-        ))}
-        {filtered.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-8">No members found.</p>
-        )}
-      </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {filteredMembers.map(m => (
+              <div key={m.memberId} className="bg-white rounded-2xl border p-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-medium">{m.firstName} {m.lastName}</p>
+                    {m.email && <p className="text-xs text-gray-400">{m.email}</p>}
+                  </div>
+                  <RoleBadge role={m.role} />
+                </div>
+                <RoleEditor member={m} families={families} onSave={handleSaveRole} />
+                <Button size="sm" variant="outline" className="w-full" onClick={() => setPasswordTarget(m)} disabled={!m.email}>
+                  Set password
+                </Button>
+              </div>
+            ))}
+            {filteredMembers.length === 0 && (
+              <p className="text-center text-sm text-gray-400 py-8">No members found.</p>
+            )}
+          </div>
+        </>
+      )}
 
       {passwordTarget && (
         <PasswordModal member={passwordTarget} onClose={() => setPasswordTarget(null)} />

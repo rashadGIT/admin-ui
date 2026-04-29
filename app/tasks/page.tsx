@@ -1,20 +1,27 @@
 "use client"
 import { useEffect, useState } from "react"
-import { api, type Task, type Member } from "@/lib/api"
+import { useSession } from "next-auth/react"
+import { api, type Task, type Member, type FamilyRecord } from "@/lib/api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import { MultiSelect } from "@/components/ui/multi-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 
 export default function TasksPage() {
+  const { data: session } = useSession()
+  const role = session?.user?.role
+
   const [tasks, setTasks] = useState<Task[]>([])
   const [members, setMembers] = useState<Member[]>([])
+  const [families, setFamilies] = useState<FamilyRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "open" | "done">("all")
   const [search, setSearch] = useState("")
+  const [selectedFamilyIds, setSelectedFamilyIds] = useState<Set<string>>(new Set())
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState({ title: "", assignedTo: "", assignedToName: "", dueDate: "" })
   const [saving, setSaving] = useState(false)
@@ -27,7 +34,10 @@ export default function TasksPage() {
   useEffect(() => {
     load()
     api.members.list().then(r => setMembers(r.items)).catch(() => {})
-  }, [])
+    if (role === "admin") {
+      api.families.list().then(r => setFamilies(r.items)).catch(() => {})
+    }
+  }, [role])
 
   const toggleStatus = async (t: Task) => {
     const newStatus = t.status === "open" ? "done" : "open"
@@ -64,6 +74,7 @@ export default function TasksPage() {
   const filtered = tasks
     .filter(t => filter === "all" || t.status === filter)
     .filter(t => `${t.title} ${t.assignedToName ?? ""}`.toLowerCase().includes(search.toLowerCase()))
+    .filter(t => selectedFamilyIds.size === 0 || selectedFamilyIds.has(t.familyId ?? ""))
     .sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"))
 
   const openCount = tasks.filter(t => t.status === "open").length
@@ -78,6 +89,19 @@ export default function TasksPage() {
         </div>
         <Button onClick={openDialog}>+ Add Task</Button>
       </div>
+
+      {role === "admin" && families.length > 0 && (
+        <div className="mb-4">
+          <MultiSelect
+            options={families.map(f => ({ value: f.familyId, label: f.familyName }))}
+            selected={selectedFamilyIds}
+            onChange={setSelectedFamilyIds}
+            placeholder="Select families…"
+            allLabel="All families"
+            className="w-64"
+          />
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-4">
         <Input
@@ -117,10 +141,7 @@ export default function TasksPage() {
                           <span className={overdue ? "text-red-500 font-medium" : ""}>{t.dueDate}</span>
                         )}
                       </div>
-                      <button
-                        onClick={() => toggleStatus(t)}
-                        className="text-xs text-blue-600 hover:underline"
-                      >
+                      <button onClick={() => toggleStatus(t)} className="text-xs text-blue-600 hover:underline">
                         {t.status === "open" ? "Mark done" : "Reopen"}
                       </button>
                     </li>
@@ -163,10 +184,7 @@ export default function TasksPage() {
                           <Badge variant={t.status === "done" ? "success" : "outline"}>{t.status}</Badge>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => toggleStatus(t)}
-                            className="text-xs text-blue-600 hover:underline"
-                          >
+                          <button onClick={() => toggleStatus(t)} className="text-xs text-blue-600 hover:underline">
                             {t.status === "open" ? "Mark done" : "Reopen"}
                           </button>
                         </td>

@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { api, type Member } from "@/lib/api"
+import { api, type Member, type FamilyRecord } from "@/lib/api"
+import { MultiSelect } from "@/components/ui/multi-select"
 import styles from "./tree.module.css"
 
 // ─── Tree data model ──────────────────────────────────────────────────────────
@@ -248,20 +249,73 @@ function ProfileBanner({ memberId }: { memberId: string }) {
   )
 }
 
+function TreeView({ members, loading }: { members: Member[]; loading: boolean }) {
+  const roots = buildForest(members)
+  const deceased = members.filter(m => m.isDeceased)
+
+  if (loading) return <p className="text-gray-400">Loading…</p>
+  if (members.length === 0) return <p className="text-gray-400">No members yet. Add members and link them via WhatsApp to build the tree.</p>
+
+  return (
+    <div>
+      <div className={styles.treeStack}>
+        {roots.map(node => (
+          <TreeNodeBlock key={node.key} node={node} depth={0} />
+        ))}
+      </div>
+
+      {deceased.length > 0 && (
+        <div className="mt-10 pt-8 border-t border-stone-200">
+          <p className="text-sm font-semibold text-gray-500 mb-4">🕊 In Loving Memory</p>
+          <div className="flex flex-wrap gap-3">
+            {deceased.map(m => (
+              <div key={m.memberId} className="bg-stone-50 border border-stone-200 rounded-xl px-4 py-3">
+                <p className="text-sm font-medium text-stone-500 italic">
+                  {m.firstName} {m.lastName ?? ""} †
+                </p>
+                {m.deathDate && (
+                  <p className="text-xs text-stone-400 mt-0.5">d. {m.deathDate.slice(0, 4)}</p>
+                )}
+                {m.tribute && (
+                  <p className="text-xs text-stone-400 mt-1 italic">"{m.tribute}"</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TreePage() {
   const { data: session } = useSession()
-  const [members, setMembers] = useState<Member[]>([])
+  const role = session?.user?.role
+  const [allMembers, setAllMembers] = useState<Member[]>([])
+  const [families, setFamilies] = useState<FamilyRecord[]>([])
+  const [selectedFamilyIds, setSelectedFamilyIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.members.list()
-      .then(r => setMembers(r.items))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+    const base = api.members.list().then(r => setAllMembers(r.items))
+    if (role === "admin") {
+      Promise.all([base, api.families.list().then(r => setFamilies(r.items))])
+        .catch(() => {})
+        .finally(() => setLoading(false))
+    } else {
+      base.catch(() => {}).finally(() => setLoading(false))
+    }
+  }, [role])
 
-  const roots = buildForest(members)
-  const deceased = members.filter(m => m.isDeceased)
+  const visibleMembers = role === "admin"
+    ? (selectedFamilyIds.size === 0
+        ? []
+        : [...new Map(
+            allMembers.filter(m => m.familyId && selectedFamilyIds.has(m.familyId)).map(m => [m.memberId, m])
+          ).values()])
+    : allMembers
+
+  const roots = buildForest(visibleMembers)
 
   return (
     <div>
@@ -270,7 +324,7 @@ export default function TreePage() {
         <div>
           <h2 className="text-2xl font-bold">Family Tree</h2>
           <p className="text-sm text-gray-400 mt-0.5">
-            {members.length} members · {roots.length} branch{roots.length !== 1 ? "es" : ""}
+            {visibleMembers.length} members · {roots.length} branch{roots.length !== 1 ? "es" : ""}
           </p>
         </div>
         <div className="flex gap-3 flex-wrap">
@@ -283,40 +337,23 @@ export default function TreePage() {
         </div>
       </div>
 
-      {loading ? (
-        <p className="text-gray-400">Loading…</p>
-      ) : members.length === 0 ? (
-        <p className="text-gray-400">No members yet. Add members and link them via WhatsApp to build the tree.</p>
-      ) : (
-        <div>
-          <div className={styles.treeStack}>
-            {roots.map(node => (
-              <TreeNodeBlock key={node.key} node={node} depth={0} />
-            ))}
-          </div>
-
-          {deceased.length > 0 && (
-            <div className="mt-10 pt-8 border-t border-stone-200">
-              <p className="text-sm font-semibold text-gray-500 mb-4">🕊 In Loving Memory</p>
-              <div className="flex flex-wrap gap-3">
-                {deceased.map(m => (
-                  <div key={m.memberId} className="bg-stone-50 border border-stone-200 rounded-xl px-4 py-3">
-                    <p className="text-sm font-medium text-stone-500 italic">
-                      {m.firstName} {m.lastName ?? ""} †
-                    </p>
-                    {m.deathDate && (
-                      <p className="text-xs text-stone-400 mt-0.5">d. {m.deathDate.slice(0, 4)}</p>
-                    )}
-                    {m.tribute && (
-                      <p className="text-xs text-stone-400 mt-1 italic">"{m.tribute}"</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+      {/* Admin: family multi-select */}
+      {role === "admin" && (
+        <div className="mb-6 flex items-center gap-3">
+          <MultiSelect
+            options={families.map(f => ({ value: f.familyId, label: f.familyName }))}
+            selected={selectedFamilyIds}
+            onChange={setSelectedFamilyIds}
+            placeholder="Select families…"
+            className="w-64"
+          />
+          {selectedFamilyIds.size === 0 && (
+            <p className="text-xs text-gray-400">Select one or more families to render the tree.</p>
           )}
         </div>
       )}
+
+      <TreeView members={visibleMembers} loading={loading} />
     </div>
   )
 }

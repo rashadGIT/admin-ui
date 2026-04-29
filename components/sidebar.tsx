@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation"
 
 const ALL_NAV = [
   { href: "/",         label: "Dashboard",    roles: ["admin", "family_admin"] },
-  { href: "/members",  label: "Members",      roles: ["admin", "family_admin"] },
+  { href: "/members",  label: "Members",      roles: ["family_admin"] },
   { href: "/tree",     label: "Family Tree",  roles: ["admin", "family_admin", "user"] },
   { href: "/tasks",    label: "Tasks",        roles: ["admin", "family_admin"] },
-  { href: "/reunion",  label: "Reunion Info", roles: ["admin", "family_admin", "user"] },
+  { href: "/reunion",  label: "Reunion Info", roles: ["family_admin", "user"] },
   { href: "/families", label: "Families",     roles: ["admin"] },
   { href: "/roles",    label: "Roles",        roles: ["admin"] },
   { href: "/profile",  label: "My Profile",   roles: ["admin", "family_admin", "user"] },
